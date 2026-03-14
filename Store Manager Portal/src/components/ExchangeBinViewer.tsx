@@ -33,7 +33,7 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
   const [flowStep, setFlowStep] = useState<FlowStep>('mobile_entry');
   const [mobile, setMobile] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [otp, setOtp] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [binRequest, setBinRequest] = useState<BinRequest | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -95,7 +95,7 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
   };
 
   const handleVerifyOtp = async () => {
-    if (!otp) { setError('Please enter the PIN.'); return; }
+    if (!verificationCode) { setError('Please enter the Verification Code.'); return; }
     setLoading(true);
     setError('');
     try {
@@ -103,14 +103,14 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
         .from('otp_verification')
         .select('*')
         .eq('mobile', mobile)
-        .eq('otp_code', otp)
+        .eq('otp_code', verificationCode)
         .eq('purpose', 'EXCHANGE_VERIFY')
         .eq('status', 'PENDING')
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
 
-      if (fetchErr || !data) throw new Error('Invalid or expired PIN from customer app.');
+      if (fetchErr || !data) throw new Error('Invalid or expired Verification Code.');
 
       await supabase.from('otp_verification').update({ status: 'VERIFIED' }).eq('id', data.id);
       await supabase.from('exchange_bin_requests').update({ status: 'MANAGER_REVIEWING' }).eq('id', binRequest!.id);
@@ -207,7 +207,7 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
       <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: '24px', display: 'flex', gap: '10px' }}>
         <AlertTriangle size={18} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
         <p style={{ fontSize: '0.83rem', color: '#fbbf24', lineHeight: 1.6 }}>
-          Ask the customer to physically bring the garments from their Exchange Bin. After OTP verification, you will view their bin and approve/reject each item.
+          Ask the customer for the <strong>Verification Code</strong> displayed on their Loyalty App. After verification, you will view their bin and approve/reject each item.
         </p>
       </div>
 
@@ -230,9 +230,9 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
         <div style={{ background: 'rgba(6, 214, 160, 0.1)', padding: '18px', borderRadius: '50%', color: 'var(--success-color)', display: 'inline-flex', marginBottom: '20px' }}>
           <ShieldCheck size={48} />
         </div>
-        <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '8px' }}>Ask {customerName} for PIN</h3>
+        <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '8px' }}>Ask {customerName} for Verification Code</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '24px', lineHeight: 1.6 }}>
-          A 4-digit verification PIN has flashed on their Loyalty App screen. Ask them to read it out to you.
+          A 4-digit Verification Code is displayed on their Loyalty App dashboard. Ask them to read it out to you.
         </p>
         <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
           Exchange Bin: {binRequest?.items.length} item{(binRequest?.items.length ?? 0) !== 1 ? 's' : ''} · Tentative ₹{binRequest?.tentative_value}
@@ -242,13 +242,13 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
           <Key size={20} style={{ position: 'absolute', left: '16px', top: '16px', color: 'var(--text-muted)' }} />
           <input
             type="text" className="input-field"
-            placeholder="Enter 4-digit PIN"
+            placeholder="Enter 4-digit Code"
             style={{ paddingLeft: '48px', letterSpacing: '6px', fontSize: '1.6rem', textAlign: 'center', fontWeight: 'bold' }}
-            value={otp} onChange={(e) => { setOtp(e.target.value); setError(''); }} maxLength={4}
+            value={verificationCode} onChange={(e) => { setVerificationCode(e.target.value); setError(''); }} maxLength={4}
           />
         </div>
         {error && <p style={{ color: 'var(--accent-color)', fontSize: '0.9rem', marginBottom: '12px' }}>{error}</p>}
-        <button onClick={handleVerifyOtp} disabled={loading || otp.length < 4} className="btn btn-primary bg-gradient-accent" style={{ marginTop: '8px' }}>
+        <button onClick={handleVerifyOtp} disabled={loading || verificationCode.length < 4} className="btn btn-primary bg-gradient-accent" style={{ marginTop: '8px' }}>
           {loading ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Verifying…</> : `Verify & View Items`}
         </button>
       </div>

@@ -26,7 +26,7 @@ export default function ExchangeProgram({ onBack }: ExchangeProgramProps) {
   const [mobile, setMobile] = useState('');
   const [customerData, setCustomerData] = useState<{name: string, balance: number} | null>(null);
   const [garments, setGarments] = useState<Garment[]>([]);
-  const [otp, setOtp] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -165,22 +165,11 @@ export default function ExchangeProgram({ onBack }: ExchangeProgramProps) {
     setError('');
 
     try {
-      const mockOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      
-      const { error: dbError } = await supabase
-        .from('otp_verification')
-        .insert({
-          mobile,
-          otp_code: mockOtp,
-          purpose: 'EXCHANGE_VERIFY'
-        });
-
-      if (dbError) throw dbError;
-
-      // In production, this pushes to the user's app. We will just transition to OTP screen.
+      // Use the persistent code logic: instead of generating a mock one here, 
+      // we transition to the code-entry screen where the manager asks the customer.
       setStep('otp');
     } catch (err: any) {
-      setError(err.message || 'Failed to trigger verification OTP.');
+      setError(err.message || 'Failed to initiate verification.');
     } finally {
       setLoading(false);
     }
@@ -188,20 +177,20 @@ export default function ExchangeProgram({ onBack }: ExchangeProgramProps) {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!otp) {
-      setError('Please enter the PIN provided by the customer.');
+    if (!verificationCode) {
+      setError('Please enter the Verification Code provided by the customer.');
       return;
     }
     setLoading(true);
     setError('');
 
     try {
-      // Find the pending OTP
+      // Find the pending verification code
       const { data, error: fetchError } = await supabase
         .from('otp_verification')
         .select('*')
         .eq('mobile', mobile)
-        .eq('otp_code', otp)
+        .eq('otp_code', verificationCode)
         .eq('purpose', 'EXCHANGE_VERIFY')
         .eq('status', 'PENDING')
         .order('created_at', { ascending: false })
@@ -209,7 +198,7 @@ export default function ExchangeProgram({ onBack }: ExchangeProgramProps) {
         .single();
 
       if (fetchError || !data) {
-        throw new Error('Invalid or expired PIN.');
+        throw new Error('Invalid or expired Verification Code.');
       }
 
       // Mark as verified
@@ -263,8 +252,8 @@ export default function ExchangeProgram({ onBack }: ExchangeProgramProps) {
           <div style={{ background: 'rgba(6, 214, 160, 0.1)', padding: '16px', borderRadius: '50%', color: 'var(--success-color)', display: 'inline-flex', marginBottom: '24px' }}>
             <ShieldCheck size={48} />
           </div>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '8px' }}>Ask {customerData?.name} for PIN</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '24px' }}>A 4-digit verification PIN has been flashed on their Loyalty App screen.</p>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '8px' }}>Ask {customerData?.name} for Code</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '24px' }}>Ask the customer for the 4-digit Verification Code displayed on their Loyalty App.</p>
 
           <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ position: 'relative' }}>
@@ -272,10 +261,10 @@ export default function ExchangeProgram({ onBack }: ExchangeProgramProps) {
               <input 
                 type="text" 
                 className="input-field" 
-                placeholder="Enter 4-digit PIN" 
+                placeholder="Enter 4-digit Code" 
                 style={{ paddingLeft: '48px', letterSpacing: '4px', fontSize: '1.5rem', textAlign: 'center', fontWeight: 'bold' }}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value)}
                 maxLength={4}
               />
             </div>

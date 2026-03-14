@@ -26,7 +26,8 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
   const [currentBanner, setCurrentBanner] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [verifyOtp, setVerifyOtp] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState<string | null>(null);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   const banners = [
     {
@@ -93,17 +94,42 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
       if (data) setCoupons(data);
     };
 
+    // Fetch persistent verification code or create one
+    const fetchVerificationCode = async () => {
+      const { data: existing } = await supabase
+        .from('otp_verification')
+        .select('otp_code')
+        .eq('mobile', userMobile)
+        .eq('status', 'PENDING')
+        .eq('purpose', 'EXCHANGE_VERIFY')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (existing) {
+        setVerificationCode(existing.otp_code);
+      } else {
+        const newCode = '1234'; 
+        await supabase.from('otp_verification').insert({ 
+          mobile: userMobile, 
+          otp_code: newCode, 
+          purpose: 'EXCHANGE_VERIFY' 
+        });
+        setVerificationCode(newCode);
+      }
+    };
+
     fetchProfile();
     fetchCoupons();
+    fetchVerificationCode();
 
-    // Subscribe to balance changes — also re-fetch from DB as a safety net
+    // Subscribe to balance changes
     const customerSub = supabase
       .channel('customer-updates')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'customers', filter: `mobile=eq.${userMobile}` }, (_payload) => {
-        // Update from real-time payload first, then re-fetch to guarantee accuracy
         setExchangeBalance(_payload.new.exchange_balance ?? 0);
         setUserName(_payload.new.name || 'Valued Customer');
-        fetchProfile(); // re-fetch as fallback in case payload is stale
+        fetchProfile();
       })
       .subscribe();
 
@@ -111,22 +137,22 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
     const couponsSub = supabase
       .channel('coupons-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons', filter: `customer_mobile=eq.${userMobile}` }, (_payload) => {
-        fetchCoupons(); // Refresh list on any change
+        fetchCoupons();
       })
       .subscribe();
 
-    // Subscribe to OTP requests from Store Manager — unique channel name per user
-    const otpSub = supabase
-      .channel(`otp-updates-${userMobile}`)
+    // Subscribe to Verification Code requests from Store Manager
+    const verificationSub = supabase
+      .channel(`verification-updates-${userMobile}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'otp_verification', 
         filter: `mobile=eq.${userMobile}` 
       }, (payload) => {
-        console.log('OTP INSERT received:', payload);
         if (payload.new.purpose === 'EXCHANGE_VERIFY' && payload.new.status === 'PENDING') {
-          setVerifyOtp(payload.new.otp_code);
+          setVerificationCode(payload.new.otp_code);
+          setShowVerificationModal(true);
         }
       })
       .on('postgres_changes', { 
@@ -135,16 +161,13 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
         table: 'otp_verification', 
         filter: `mobile=eq.${userMobile}` 
       }, (payload) => {
-        console.log('OTP UPDATE received:', payload);
         if (payload.new.purpose === 'EXCHANGE_VERIFY' && payload.new.status === 'VERIFIED') {
-          setVerifyOtp(null);
+          setShowVerificationModal(false);
         }
       })
-      .subscribe((status) => {
-        console.log(`OTP subscription status for ${userMobile}:`, status);
-      });
+      .subscribe();
 
-    // Subscribe to exchange bin item decisions from manager
+    // Subscribe to exchange bin item decisions
     const binSub = supabase
       .channel(`bin-updates-${userMobile}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exchange_bin_items', filter: `customer_mobile=eq.${userMobile}` }, (payload) => {
@@ -160,7 +183,7 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
     return () => {
       supabase.removeChannel(customerSub);
       supabase.removeChannel(couponsSub);
-      supabase.removeChannel(otpSub);
+      supabase.removeChannel(verificationSub);
       supabase.removeChannel(binSub);
     };
   }, [userMobile]);
@@ -205,19 +228,20 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px', overflowY: 'auto', position: 'relative' }}>
       
-      {/* Verification OTP Modal (Store Manager Flow) */}
-      {verifyOtp && (
+      {/* Verification Code Modal (Triggered by Manager) */}
+      {showVerificationModal && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(12, 13, 20, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', textAlign: 'center' }} className="animate-fade-in">
           <div style={{ background: 'rgba(6, 214, 160, 0.1)', padding: '20px', borderRadius: '50%', marginBottom: '24px', color: 'var(--success-color)' }}>
             <ShieldCheck size={48} />
           </div>
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '12px' }}>Exchange Verification</h2>
-          <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', marginBottom: '32px' }}>A store manager is processing an exchange for you. Please share this PIN with them to approve it.</p>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '12px' }}>Verification Required</h2>
+          <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', marginBottom: '32px' }}>A store manager needs your verification code to process an exchange. Please share this PIN with them.</p>
           
           <div style={{ background: 'var(--surface-color)', padding: '24px', borderRadius: 'var(--radius-md)', border: '2px dashed var(--success-color)', width: '100%' }}>
-            <h1 style={{ fontSize: '3.5rem', fontWeight: 800, letterSpacing: '8px', margin: 0 }}>{verifyOtp}</h1>
+            <h1 style={{ fontSize: '3.5rem', fontWeight: 800, letterSpacing: '8px', margin: 0 }}>{verificationCode}</h1>
           </div>
           <p style={{ marginTop: '24px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Waiting for manager to confirm...</p>
+          <button onClick={() => setShowVerificationModal(false)} style={{ marginTop: '32px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}>Minimize</button>
         </div>
       )}
 
@@ -380,6 +404,17 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
           <button onClick={() => setBinReviewedItems([])} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'underline' }}>Dismiss</button>
         </div>
       )}
+
+      {/* Verification Code Display */}
+      <div className="glass-panel animate-fade-in" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', marginBottom: '16px', borderLeft: '4px solid var(--success-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>My Verification Code</h4>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Share with manager for store actions</p>
+        </div>
+        <div style={{ background: 'rgba(6, 214, 160, 0.1)', color: 'var(--success-color)', padding: '8px 16px', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--success-color)' }}>
+          <span style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '2px' }}>{verificationCode || '....'}</span>
+        </div>
+      </div>
 
       {/* The Great Fashion Exchange Wallet */}
       <div className="glass-panel animate-fade-in" style={{ padding: '20px', borderRadius: 'var(--radius-md)', marginBottom: '32px', borderLeft: '4px solid var(--accent-color)', display: 'flex', flexDirection: 'column' }}>

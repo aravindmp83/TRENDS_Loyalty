@@ -130,13 +130,10 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
     // Compress to 0.6 quality for bandwidth optimization
     const photoUrl = canvas.toDataURL('image/jpeg', 0.6);
     const id = Math.random().toString(36).slice(2);
-    setItems((prev) => [...prev, { id, photoUrl, latitude: lat, longitude: lng, isAnalyzing: true }]);
-
-    const delay = 1500 + Math.random() * 1000;
-    setTimeout(() => {
-      const pick = AI_CLASSIFICATIONS[Math.floor(Math.random() * AI_CLASSIFICATIONS.length)];
-      setItems((prev) => prev.map((item) => item.id === id ? { ...item, isAnalyzing: false, aiCategory: pick.category, aiTier: pick.tier } : item));
-    }, delay);
+    
+    // AI Training Mode: Add item with analysis=true, but immediately open category selector
+    setItems((prev) => [...prev, { id, photoUrl, latitude: lat, longitude: lng, isAnalyzing: false }]);
+    setEditingItemId(id);
   };
 
   const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
@@ -290,39 +287,58 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
         <button onClick={() => { startCamera(); setStep('camera'); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}>
           <ArrowLeft size={24} />
         </button>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Review Your Items</h2>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>AI Training: Review Items</h2>
       </div>
 
       {editingItemId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div className="glass-panel animate-scale-in" style={{ width: '100%', maxWidth: '400px', padding: '24px', position: 'relative' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Correct Classification</h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>If the AI misidentified your garment, please select the correct category below:</p>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div className="glass-panel animate-scale-in" style={{ width: '100%', maxWidth: '400px', padding: '24px', position: 'relative', border: '1px solid var(--primary-color)' }}>
+            <div style={{ background: 'rgba(123, 44, 191, 0.1)', padding: '16px', borderRadius: '50%', width: 'fit-content', margin: '0 auto 16px', color: 'var(--primary-color)' }}>
+              <Zap size={32} />
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px', textAlign: 'center' }}>Train AI Model</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px', textAlign: 'center' }}>Please identify this garment to help our AI learn and provide accurate valuation.</p>
+            
+            {/* Show compressed preview */}
+            <div style={{ width: '80px', height: '80px', margin: '0 auto 20px', borderRadius: '12px', overflow: 'hidden', border: '2px solid var(--primary-color)' }}>
+              <img src={items.find(i => i.id === editingItemId)?.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
               {AI_CLASSIFICATIONS.map((c) => (
                 <button
                   key={c.category}
                   onClick={() => {
-                    setItems((prev) => prev.map((item) => item.id === editingItemId ? { ...item, aiCategory: c.category, aiTier: c.tier } : item));
+                    setItems((prev) => prev.map((item) => item.id === editingItemId ? { ...item, aiCategory: c.category, aiTier: c.tier, isAnalyzing: false } : item));
                     setEditingItemId(null);
                   }}
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.05)',
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-sm)',
-                    padding: '12px',
+                    padding: '14px',
                     textAlign: 'left',
                     color: 'white',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer'
+                    fontSize: '0.95rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}
                 >
-                  {c.category} (₹{c.tier})
+                  <span>{c.category}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--secondary-color)' }}>₹{c.tier}</span>
                 </button>
               ))}
             </div>
             <button
-              onClick={() => setEditingItemId(null)}
+              onClick={() => {
+                const item = items.find(i => i.id === editingItemId);
+                if (!item?.aiCategory) {
+                  setItems(prev => prev.filter(i => i.id !== editingItemId));
+                }
+                setEditingItemId(null);
+              }}
               style={{ width: '100%', marginTop: '16px', background: 'transparent', border: '1px solid var(--border-color)', padding: '12px', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', cursor: 'pointer' }}
             >
               Cancel
@@ -339,10 +355,13 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
             </div>
             <div style={{ flex: 1 }}>
               <p style={{ fontWeight: 600, marginBottom: '4px' }}>Item #{idx + 1}</p>
-              {item.isAnalyzing ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> AI analysing…
-                </div>
+              {!item.aiCategory ? (
+                <button 
+                  onClick={() => setEditingItemId(item.id)}
+                  style={{ background: 'var(--primary-color)', border: 'none', color: 'white', fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px' }}
+                >
+                  Choose Category
+                </button>
               ) : (
                 <>
                 <div style={{ cursor: 'pointer' }} onClick={() => setEditingItemId(item.id)}>
