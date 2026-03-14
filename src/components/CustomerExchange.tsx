@@ -63,6 +63,7 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
   const [userLng, setUserLng] = useState<number | null>(null);
   const [nearbyStores, setNearbyStores] = useState<(typeof STORE_DATABASE[0] & { dist: number })[]>([]);
   const [isSavingBin, setIsSavingBin] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const startCamera = async () => {
@@ -91,11 +92,29 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
   const snapPhoto = async () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
+    
+    // Create optimized canvas
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const MAX_DIM = 800;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+
+    if (width > height) {
+      if (width > MAX_DIM) {
+        height *= MAX_DIM / width;
+        width = MAX_DIM;
+      }
+    } else {
+      if (height > MAX_DIM) {
+        width *= MAX_DIM / height;
+        height = MAX_DIM;
+      }
+    }
+    
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, width, height);
 
     let lat: number | undefined;
     let lng: number | undefined;
@@ -108,11 +127,10 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
       if (!userLat) { setUserLat(lat); setUserLng(lng); }
     } catch { /* location unavailable */ }
 
-    // GPS + timestamp are stored as separate DB fields — NOT burned onto the photo
-    const photoUrl = canvas.toDataURL('image/jpeg', 0.85);
+    // Compress to 0.6 quality for bandwidth optimization
+    const photoUrl = canvas.toDataURL('image/jpeg', 0.6);
     const id = Math.random().toString(36).slice(2);
     setItems((prev) => [...prev, { id, photoUrl, latitude: lat, longitude: lng, isAnalyzing: true }]);
-
 
     const delay = 1500 + Math.random() * 1000;
     setTimeout(() => {
@@ -275,6 +293,44 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
         <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Review Your Items</h2>
       </div>
 
+      {editingItemId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div className="glass-panel animate-scale-in" style={{ width: '100%', maxWidth: '400px', padding: '24px', position: 'relative' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Correct Classification</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>If the AI misidentified your garment, please select the correct category below:</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+              {AI_CLASSIFICATIONS.map((c) => (
+                <button
+                  key={c.category}
+                  onClick={() => {
+                    setItems((prev) => prev.map((item) => item.id === editingItemId ? { ...item, aiCategory: c.category, aiTier: c.tier } : item));
+                    setEditingItemId(null);
+                  }}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.05)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '12px',
+                    textAlign: 'left',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {c.category} (₹{c.tier})
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setEditingItemId(null)}
+              style={{ width: '100%', marginTop: '16px', background: 'transparent', border: '1px solid var(--border-color)', padding: '12px', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
         {items.map((item, idx) => (
           <div key={item.id} className="glass-panel animate-fade-in" style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', borderLeft: '4px solid var(--secondary-color)' }}>
@@ -289,8 +345,10 @@ export default function CustomerExchange({ userMobile, onBack }: CustomerExchang
                 </div>
               ) : (
                 <>
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{item.aiCategory}</p>
-                  <p style={{ fontWeight: 700, color: 'var(--secondary-color)' }}>₹{item.aiTier}</p>
+                <div style={{ cursor: 'pointer' }} onClick={() => setEditingItemId(item.id)}>
+                  <p style={{ fontSize: '0.92rem', color: 'var(--secondary-color)', fontWeight: 600, textDecoration: 'underline' }}>{item.aiCategory}</p>
+                  <p style={{ fontWeight: 700, color: 'var(--text-primary)' }}>₹{item.aiTier}</p>
+                </div>
                 </>
               )}
               {item.latitude && (

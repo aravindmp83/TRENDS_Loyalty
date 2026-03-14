@@ -24,6 +24,8 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
   const [userName, setUserName] = useState('Valued Customer');
   const [showGenerator, setShowGenerator] = useState(false);
   const [currentBanner, setCurrentBanner] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const [verifyOtp, setVerifyOtp] = useState<string | null>(null);
 
   const banners = [
@@ -57,9 +59,9 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentBanner((prev) => (prev + 1) % banners.length);
-    }, 5000);
+    }, 15000);
     return () => clearInterval(timer);
-  }, []);
+  }, [banners.length]);
   const [binReviewedItems, setBinReviewedItems] = useState<{ category: string; status: string; finalValue: number }[]>([]);
 
   useEffect(() => {
@@ -236,7 +238,24 @@ export default function Dashboard({ userMobile, onLogout, onShowExchange, onShow
       </div>
 
       {/* Featured Banner Carousel (Everything unified here) */}
-      <div style={{ position: 'relative', marginBottom: '24px', borderRadius: 'var(--radius-lg)', overflow: 'hidden', height: '240px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+      <div 
+        style={{ position: 'relative', marginBottom: '24px', borderRadius: 'var(--radius-lg)', overflow: 'hidden', height: '240px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
+        onTouchStart={(e) => setTouchStart(e.targetTouches[0].clientX)}
+        onTouchMove={(e) => setTouchEnd(e.targetTouches[0].clientX)}
+        onTouchEnd={() => {
+          if (!touchStart || !touchEnd) return;
+          const distance = touchStart - touchEnd;
+          const isLeftSwipe = distance > 50;
+          const isRightSwipe = distance < -50;
+          if (isLeftSwipe) {
+            setCurrentBanner((prev) => (prev + 1) % banners.length);
+          } else if (isRightSwipe) {
+            setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length);
+          }
+          setTouchStart(null);
+          setTouchEnd(null);
+        }}
+      >
         {banners.map((banner, idx) => (
           <div
             key={banner.id}
