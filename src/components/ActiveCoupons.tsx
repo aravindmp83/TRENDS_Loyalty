@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Ticket, Clock, AlertCircle, CheckCircle, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -35,6 +35,24 @@ function getDaysLeftUrgency(days: number) {
   return { color: 'var(--text-muted)', bg: 'transparent', urgent: false };
 }
 
+// Ensure consistency with Statement view
+function resolveStatus(c: any): 'ACTIVE' | 'REDEEMED' | 'EXPIRED' {
+  if (c.status === 'REDEEMED') return 'REDEEMED';
+  if (c.status === 'EXPIRED') return 'EXPIRED';
+  if (c.expiry) {
+    const match = c.expiry.match(/(\d+)\s*day/i);
+    if (match) {
+      const days = parseInt(match[1], 10);
+      const expiryMs = new Date(c.created_at).getTime() + days * 86400000;
+      if (Date.now() > expiryMs) return 'EXPIRED';
+    } else {
+      const d = new Date(c.expiry);
+      if (!isNaN(d.getTime()) && Date.now() > d.getTime()) return 'EXPIRED';
+    }
+  }
+  return 'ACTIVE';
+}
+
 export default function ActiveCoupons({ coupons: initialCoupons, onBack, onShowStatement }: ActiveCouponsProps) {
   const [redeemingCouponId, setRedeemingCouponId] = useState<string | null>(null);
   const [empIdInput, setEmpIdInput] = useState('');
@@ -42,7 +60,12 @@ export default function ActiveCoupons({ coupons: initialCoupons, onBack, onShowS
   const [redeemError, setRedeemError] = useState('');
   const [localCoupons, setLocalCoupons] = useState(initialCoupons);
 
-  const activeCoupons = localCoupons.filter(c => c.status === 'ACTIVE');
+  // Sync with props when background fetch completes in App.tsx
+  useEffect(() => {
+    setLocalCoupons(initialCoupons);
+  }, [initialCoupons]);
+
+  const activeCoupons = localCoupons.filter(c => resolveStatus(c) === 'ACTIVE');
 
   const handleRedeemConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
