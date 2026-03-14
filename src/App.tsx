@@ -9,10 +9,12 @@ import ExchangeBinStatus from './components/ExchangeBinStatus';
 import CouponStatement from './components/CouponStatement';
 import ActiveCoupons from './components/ActiveCoupons';
 import SS26Collection from './components/SS26Collection';
+import ExchangeGallery from './components/ExchangeGallery';
 import { supabase } from './lib/supabaseClient';
+import { Home, Image as ImageIcon, Ticket, User as UserIcon } from 'lucide-react';
 
 function App() {
-  const [view, setView] = useState<'login' | 'register' | 'dashboard' | 'exchange' | 'history' | 'bin_status' | 'statement' | 'active_coupons' | 'ss26_collection'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'dashboard' | 'exchange' | 'history' | 'bin_status' | 'statement' | 'active_coupons' | 'ss26_collection' | 'gallery'>('login');
   const [userMobile, setUserMobile] = useState<string>('');
   const [allCoupons, setAllCoupons] = useState<any[]>([]);
 
@@ -107,6 +109,13 @@ function App() {
         />
       )}
 
+      {view === 'gallery' && (
+        <ExchangeGallery
+          userMobile={userMobile}
+          onBack={() => setView('dashboard')}
+        />
+      )}
+
       {view === 'ss26_collection' && (
         <SS26Collection
           onBack={() => setView('dashboard')}
@@ -125,6 +134,40 @@ function App() {
           onRegister={handleRegister} 
           onBack={() => setView('login')} 
         />
+      )}
+
+      {/* Bottom Navigation Bar */}
+      {userMobile && !['login', 'register', 'exchange'].includes(view) && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(12, 13, 20, 0.9)', backdropFilter: 'blur(20px)', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-around', padding: '12px 0 24px', zIndex: 100 }}>
+          <button 
+            onClick={() => setView('dashboard')}
+            style={{ background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer', color: view === 'dashboard' ? 'var(--primary-color)' : 'var(--text-muted)' }}
+          >
+            <Home size={22} color={view === 'dashboard' ? 'var(--primary-color)' : 'var(--text-muted)'} />
+            <span style={{ fontSize: '0.65rem', fontWeight: view === 'dashboard' ? 700 : 500 }}>Home</span>
+          </button>
+          <button 
+            onClick={() => setView('gallery')}
+            style={{ background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer', color: view === 'gallery' ? 'var(--primary-color)' : 'var(--text-muted)' }}
+          >
+            <ImageIcon size={22} color={view === 'gallery' ? 'var(--primary-color)' : 'var(--text-muted)'} />
+            <span style={{ fontSize: '0.65rem', fontWeight: view === 'gallery' ? 700 : 500 }}>Gallery</span>
+          </button>
+          <button 
+            onClick={() => setView('active_coupons')}
+            style={{ background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer', color: view === 'active_coupons' ? 'var(--primary-color)' : 'var(--text-muted)' }}
+          >
+            <Ticket size={22} color={view === 'active_coupons' ? 'var(--primary-color)' : 'var(--text-muted)'} />
+            <span style={{ fontSize: '0.65rem', fontWeight: view === 'active_coupons' ? 700 : 500 }}>Coupons</span>
+          </button>
+          <button 
+            onClick={() => setView('statement')}
+            style={{ background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer', color: view === 'statement' ? 'var(--primary-color)' : 'var(--text-muted)' }}
+          >
+            <UserIcon size={22} color={view === 'statement' ? 'var(--primary-color)' : 'var(--text-muted)'} />
+            <span style={{ fontSize: '0.65rem', fontWeight: view === 'statement' ? 700 : 500 }}>Profile</span>
+          </button>
+        </div>
       )}
     </div>
   );

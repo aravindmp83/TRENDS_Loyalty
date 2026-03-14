@@ -163,6 +163,22 @@ export default function CouponStatement({ userMobile, onBack, onRedeem }: Coupon
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('ACTIVE');
 
+  const applyPreset = (days: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    setFromDate(toYMD(start));
+    setToDate(toYMD(end));
+    setError('');
+  };
+
+  const applyThisMonth = () => {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    setFromDate(toYMD(start));
+    setToDate(toYMD(today));
+    setError('');
+  };
+
   const handleApply = async () => {
     if (!fromDate || !toDate) { setError('Please select both dates.'); return; }
     if (fromDate > toDate) { setError('From date must be before To date.'); return; }
@@ -248,6 +264,32 @@ export default function CouponStatement({ userMobile, onBack, onRedeem }: Coupon
               <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>To</label>
               <input type="date" className="input-field" value={toDate} min={fromDate} max={toYMD(today)} onChange={e => setToDate(e.target.value)} style={{ fontSize: '0.9rem', padding: '10px 12px', colorScheme: 'dark' }} />
             </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }} className="no-scrollbar">
+            {[
+              { label: 'Today', action: () => applyPreset(0) },
+              { label: '7 Days', action: () => applyPreset(7) },
+              { label: '30 Days', action: () => applyPreset(30) },
+              { label: 'This Month', action: applyThisMonth },
+            ].map((p) => (
+              <button
+                key={p.label}
+                onClick={p.action}
+                style={{
+                  whiteSpace: 'nowrap',
+                  padding: '6px 12px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
           {error && <p style={{ color: 'var(--accent-color)', fontSize: '0.85rem', marginBottom: '8px' }}>{error}</p>}
           <button onClick={handleApply} disabled={loading} className="btn btn-primary" style={{ width: '100%', height: '46px', fontSize: '0.95rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>

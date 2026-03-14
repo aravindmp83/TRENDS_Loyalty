@@ -150,18 +150,32 @@ export default function ExchangeBinViewer({ onBack }: ExchangeBinViewerProps) {
           .eq('id', item.id);
       }
 
-      const totalFinalValue = binRequest.items.reduce((s, i) => s + (i.final_value ?? 0), 0);
+      const totalFinalValue = binRequest.items.reduce((s, i) => s + (Number(i.final_value) || 0), 0);
 
       // Mark request as COMPLETED
-      await supabase
+      const { error: reqError } = await supabase
         .from('exchange_bin_requests')
         .update({ status: 'COMPLETED', final_value: totalFinalValue })
         .eq('id', binRequest.id);
+      
+      if (reqError) throw reqError;
 
-      // Credit customer exchange balance
-      const { data: customer } = await supabase.from('customers').select('exchange_balance').eq('mobile', mobile).single();
-      const currentBalance = customer?.exchange_balance ?? 0;
-      await supabase.from('customers').update({ exchange_balance: currentBalance + totalFinalValue }).eq('mobile', mobile);
+      // Credit customer exchange balance - use an atomic update or fresh fetch
+      const { data: customer, error: custFetchErr } = await supabase
+        .from('customers')
+        .select('exchange_balance')
+        .eq('mobile', mobile)
+        .single();
+      
+      if (custFetchErr) throw custFetchErr;
+
+      const currentBalance = Number(customer?.exchange_balance) || 0;
+      const { error: balError } = await supabase
+        .from('customers')
+        .update({ exchange_balance: currentBalance + totalFinalValue })
+        .eq('mobile', mobile);
+      
+      if (balError) throw balError;
 
       setBinRequest((prev) => prev ? { ...prev, final_value: totalFinalValue } : prev);
       setFlowStep('done');
